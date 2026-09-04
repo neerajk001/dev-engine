@@ -1,0 +1,24 @@
+{
+  "name": "dev-engine",
+  "version": "1.0.0",
+  "description": "Local-first AI coding CLI agent with prompt optimization",
+  "main": "dist/src/cli/index.js",
+  "scripts": {
+    "start": "node dist/src/cli/index.js",
+    "dev": "node --experimental-strip-types src/cli/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\""
+  },
+  "keywords": [],
+  "type": "module",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "openai": "^7.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1"
+  }
+}
