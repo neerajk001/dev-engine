@@ -34,6 +34,9 @@ export class OpenAIProvider implements LLMProvider {
         model: this.model,
         messages,
         ...(tools.length > 0 ? { tools, tool_choice: 'auto' } : {}),
+        ...(request.json === true
+          ? { response_format: { type: 'json_object' as const } }
+          : {}),
       },
       { timeout: this.timeoutMs },
     );
@@ -58,10 +61,18 @@ export class OpenAIProvider implements LLMProvider {
     });
 
     const hasToolCalls = toolCalls.length > 0;
+    const tokenUsage = completion.usage
+      ? {
+          promptTokens: completion.usage.prompt_tokens,
+          completionTokens: completion.usage.completion_tokens,
+          totalTokens: completion.usage.total_tokens,
+        }
+      : undefined;
     return {
       stopReason: hasToolCalls ? 'tool_calls' : 'end_turn',
       content: msg.content,
       toolCalls,
+      ...(tokenUsage !== undefined ? { tokenUsage } : {}),
     };
   }
 }

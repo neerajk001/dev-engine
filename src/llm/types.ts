@@ -27,6 +27,14 @@ export interface ToolDefinition {
 export interface GenerateRequest {
   messages: ProviderMessage[];
   tools: ToolDefinition[];
+  /** Ask the model to respond with a single JSON object (no tool calls). */
+  json?: boolean;
+}
+
+export interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 
 export interface ModelResponse {
@@ -34,4 +42,6 @@ export interface ModelResponse {
   /** Assistant text content, if any. */
   content: string | null;
   toolCalls: ProviderToolCall[];
+  /** Token usage from this request, if available. */
+  tokenUsage?: TokenUsage;
 }

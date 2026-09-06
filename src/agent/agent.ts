@@ -3,6 +3,7 @@ import { buildSystemPrompt } from '../llm/prompt.js';
 import { buildProjectContext, renderProjectContext, validateRoot } from '../context/project.js';
 import { createToolRegistry } from '../tools/registry.js';
 import type { Tool } from '../tools/types.js';
+import type { AgentEvent } from './events.js';
 import { runAgentLoop } from './loop.js';
 import type { AgentConfig, AgentResult } from './types.js';
 
@@ -46,19 +47,25 @@ export class Agent {
 
   /** Run a single natural-language task to completion. */
   async run(task: string): Promise<AgentResult> {
-    return this.runWithHooks(task, undefined);
+    return this.runWithHooks(task, undefined, undefined);
   }
 
   /** Run a task, forwarding live status to an optional hook. */
-  async runWithHooks(task: string, onStatus?: (status: string) => void): Promise<AgentResult> {
+  async runWithHooks(
+    task: string,
+    onStatus?: (status: string) => void,
+    onEvent?: (event: AgentEvent) => void,
+  ): Promise<AgentResult> {
     return runAgentLoop({
       provider: this.provider,
       tools: this.tools,
       systemPrompt: this.systemPrompt,
+      projectContext: this.projectContext,
       task,
       config: {
         ...this.config,
         ...(onStatus !== undefined ? { onStatus } : {}),
+        ...(onEvent !== undefined ? { onEvent } : {}),
       },
     });
   }
