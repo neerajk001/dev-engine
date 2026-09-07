@@ -13,9 +13,9 @@ export interface ReplOptions {
   model?: string;
   /** Present when the /optimize flow is enabled. */
   optimizer?: OptimizeEngine;
-  /** Injectable for tests. */
-  input?: NodeJS.ReadableStream;
-  output?: NodeJS.WritableStream;
+  /** Injectable for tests. */ 
+  input?: NodeJS.ReadableStream; 
+  output?: NodeJS.WritableStream; 
 }
 
 /**

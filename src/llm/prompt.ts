@@ -1,10 +1,13 @@
 import type { ToolDefinition } from './types.js';
+import type { TaskMode } from '../agent/task-mode.js';
 
 export interface SystemPromptInput {
   root: string;
   projectName: string;
   projectContext: string;
   tools: ToolDefinition[];
+  taskMode?: TaskMode;
+  sessionContext?: string;
 }
 
 /**
@@ -20,6 +23,9 @@ Project name: ${input.projectName}
 
 ${input.projectContext}
 
+TASK MODE: ${input.taskMode ?? 'implement'}
+${input.sessionContext ? `PREVIOUS SESSION CONTEXT:\n${input.sessionContext}\n` : ''}
+
 AVAILABLE TOOLS:
 ${toolLines}
 
@@ -32,6 +38,11 @@ RULES:
 - run_command executes without a shell; pass commands exactly like "npm test" or "node --test tests/".
 - Never claim success without running the relevant verification.
 - If a command requires approval you do not have, say so and stop.
+- In analyze, plan, and verify modes, do not call edit_file. These modes are read-only.
+- In analyze mode, answer the question without changing files.
+- In plan mode, provide an implementation plan without changing files.
+- In verify mode, inspect and test the existing implementation without changing files.
+- In implement mode, make the requested code changes and verify them.
 
 FINAL REPORT FORMAT:
 End your final message with one of these exact prefixes on its own first line:

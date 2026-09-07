@@ -2,6 +2,8 @@
 
 A local-first AI coding agent with a project-aware **Prompt Optimization + Intent Clarification** workflow.
 
+This is an engineering project for exploring reliable tool-using agents, not just a chat wrapper. The system turns a natural-language request into controlled repository changes, verifies those changes, records what happened, and measures the result.
+
 ## Core Idea
 
 Most developers do not always know how to express a coding task precisely.
@@ -73,6 +75,96 @@ Evaluation: benchmark task definitions (3 tasks), deterministic evaluators (test
 ### Future phase
 
 Multi-agent / provider comparison (planned after V5).
+
+## Architecture
+
+The system is split into small boundaries with one-way data flow:
+
+```text
+CLI / TUI
+  |
+  +--> Prompt optimizer --> OptimizedTask
+  |                              |
+  +------------------------------+--> Agent loop
+                     |
+         +-----------------------+-----------------------+
+         |                       |                       |
+      LLM provider          Tool registry            Verifier
+         |                       |                       |
+      OpenAI adapter       read/search/edit/shell       tests/build/tsc
+                     |
+                  Safety validation
+                     |
+              Trace + result persistence
+```
+
+Important boundaries:
+
+- `LLMProvider` isolates provider-specific API calls from orchestration.
+- The tool registry gives the model a typed tool surface; tools do not control the agent loop.
+- The optimizer is independent from the coding agent and returns a structured `OptimizedTask`.
+- Safety checks validate paths and commands before filesystem or shell access.
+- Verification returns structured feedback so failed changes can enter a bounded repair loop.
+- Tracing records run IDs, events, timing, token usage, tool calls, and failures for later inspection.
+
+## Complexity And Resource Bounds
+
+Let `F` be the number of files examined, `S` the total size of searched file content, `I` the iteration limit, `T` the number of tool calls, and `R` the repair limit.
+
+| Operation | Complexity / bound | Practical implication |
+| --- | --- | --- |
+| Project context collection | `O(F)` tree traversal; file reads are capped | Context discovery is linear in the workspace and bounded to 300 tree entries and 4,000 rendered context tokens. |
+| Relevant-file search | Approximately `O(S)` for the ripgrep/search pass | Search is delegated to repository-aware tooling instead of loading the whole repository into the prompt. |
+| Agent orchestration | At most `I` model iterations plus optional planning | `MAX_ITERATIONS` prevents an uncontrolled loop; the default is 25. |
+| Tool execution | `O(T)` orchestration overhead, excluding the tool itself | Each tool call is validated and recorded before its result is returned to the model. |
+| Verification and repair | At most `R` repair attempts; each attempt costs one or more project commands | `MAX_REPAIRS` bounds recovery work; the default is 3. Command runtime depends on the project. |
+| Prompt optimization | Two model calls: intent analysis and task generation | A clarification answer is included in the task-generation call; the repository context is bounded before either call. |
+| Trace persistence | `O(E)` for `E` recorded events | Traces are append-like JSON artifacts and are best-effort so persistence failure does not hide the task result. |
+
+The dominant cost is normally model latency and token usage, followed by verification command runtime. Traditional in-memory algorithmic complexity is important for local search and traversal, but it is not the main performance bottleneck for an LLM-driven workflow.
+
+## Safety And Reliability
+
+- Workspace paths are resolved and checked against the configured project root to prevent path traversal.
+- Shell commands go through an allow-list and dangerous commands can require explicit approval.
+- The agent has explicit iteration, repair, and approval limits.
+- A successful model response is not enough to claim success: edits are verified with the best available project check, and failures are returned to the repair loop.
+- Non-recoverable tool failures produce a blocked result instead of being silently retried.
+- Every run has a final status: `[done]`, `[failed]`, or `[blocked]`, with evidence in the result and persisted trace.
+
+## Testing And Evaluation
+
+The test suite covers:
+
+- path and command safety;
+- all filesystem, search, shell, and Git tools;
+- the agent loop, planning, task modes, and event model;
+- optimizer context collection, ambiguity handling, and structured task parsing;
+- verification requirements and repair behavior;
+- trace persistence, CLI behavior, output formatting, and TUI rendering; and
+- deterministic evaluation scoring.
+
+The project separates deterministic checks from model judgment. Tests, builds, compiler checks, and requirement checks provide reproducible evidence. The LLM judge is currently scaffolded rather than being the source of truth, which keeps the evaluation pipeline explainable.
+
+## Engineering Tradeoffs And Limitations
+
+- **Local-first CLI:** gives the agent direct repository access and keeps deployment simple, but it is not yet a hosted multi-user service.
+- **Progressive retrieval instead of a vector database:** tree summaries, `ripgrep`, and bounded file reads are easier to inspect and sufficient for this project size; semantic retrieval may become useful at larger repository scale.
+- **Single agent before multi-agent:** keeps state, failure recovery, and evaluation understandable; provider and agent comparison is deliberately future work.
+- **Deterministic verification before LLM judging:** stronger for correctness, but project-specific tests still determine how much behavior can be verified automatically.
+- **Best-effort trace persistence:** a trace write failure does not crash a coding run, but that run may be missing from history.
+- **OpenAI is the current provider implementation:** the interface is provider-independent, but additional providers are not implemented yet.
+
+## Interview Discussion Points
+
+This project is designed to make the following engineering decisions easy to discuss:
+
+1. How to bound an autonomous loop with iteration, approval, and repair limits.
+2. How to keep model-specific code behind an interface and keep tools separate from orchestration.
+3. How to validate untrusted model-generated paths and commands before execution.
+4. How to turn vague intent into a structured task without silently inventing requirements.
+5. How to verify agent output with deterministic checks and expose failures as repair context.
+6. How to make agent behavior observable through event traces, token usage, timing, and evaluation metrics.
 
 ## Running
 

@@ -8,7 +8,7 @@ import { resolveRoot } from '../context/workspace.js';
 import { banner, errorLine, helpText } from './output.js';
 import { runRepl } from './repl.js';
 
-const DEFAULT_MODEL = 'gpt-4o-mini';
+const DEFAULT_MODEL = 'gpt-5-mini';
 const DEFAULT_MAX_ITERATIONS = 25;
 
 /** Parse --workspace from argv (kept tiny; no arg library in V1). */
@@ -92,6 +92,10 @@ export async function main(argv: string[]): Promise<number> {
         if (approvalMode === 'none') return true;
         // In line mode, plan approval reuses the command confirmation prompt.
         return askYesNo(`Approve this plan? [y/N] `);
+      },
+      onApproveTask: async ({ prompt, workspace }) => {
+        process.stdout.write(`\nTask: ${prompt}\nWorkspace: ${workspace}\n`);
+        return askYesNo('Allow implementation changes? [y/N] ');
       },
     },
   });

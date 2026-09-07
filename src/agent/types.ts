@@ -1,5 +1,6 @@
 import type { AgentEvent } from './events.js';
 import type { Tool } from '../tools/types.js';
+import type { TaskMode } from './task-mode.js';
 
 export type AgentStatus = 'done' | 'failed' | 'blocked';
 
@@ -17,6 +18,8 @@ export interface AgentConfig {
   onConfirmCommand: (command: string) => Promise<boolean>;
   /** Called when the agent proposes a plan and approvalMode requires sign-off. */
   onApprovePlan?: (plan: unknown) => Promise<boolean>;
+  /** Called before an implementation task starts editing files. */
+  onApproveTask?: (task: { prompt: string; mode: TaskMode; workspace: string }) => Promise<boolean>;
   /** Called with a short status step for the CLI to render (optional). */
   onStatus?: (status: string) => void;
   /** Called with structured events (replaces onStatus when present). */
@@ -43,4 +46,7 @@ export interface AgentResult {
   durationMs: number;
   /** V4: token usage for the run. */
   tokenUsage: { promptTokens: number; completionTokens: number; totalTokens: number };
+  taskMode?: TaskMode;
+  changedFiles?: string[];
+  requirementVerified?: boolean;
 }

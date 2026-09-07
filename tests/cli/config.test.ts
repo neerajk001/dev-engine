@@ -18,7 +18,7 @@ test('configFromEnv: defaults when unset', () => {
     delete process.env.MAX_REPAIRS;
     delete process.env.APPROVAL_MODE;
     const c = configFromEnv();
-    assert.equal(c.model, 'gpt-4o-mini');
+    assert.equal(c.model, 'gpt-5-mini');
     assert.equal(c.maxIterations, 25);
     assert.equal(c.maxRepairs, 3);
     assert.equal(c.approvalMode, 'none');

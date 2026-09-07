@@ -8,6 +8,8 @@ import { verifyProject } from '../verification/runner.js';
 import type { Verdict } from '../verification/types.js';
 import type { AgentConfig, AgentResult, AgentStatus } from './types.js';
 import type { AgentEvent } from './events.js';
+import type { TaskMode } from './task-mode.js';
+import { checkRequirements } from '../verification/requirements.js';
 import { eventToLine } from './events.js';
 import { TraceCollector } from '../tracing/collector.js';
 import { saveTrace } from '../tracing/trace.js';
@@ -35,6 +37,8 @@ export interface RunAgentInput {
   systemPrompt: string;
   projectContext: string;
   task: string;
+  taskMode?: TaskMode;
+  sessionContext?: string;
   config: AgentConfig;
 }
 
@@ -89,10 +93,21 @@ export async function runAgentLoop(input: RunAgentInput): Promise<AgentResult> {
   emit({ type: 'agent_start', task });
 
   const finish = (result: Omit<AgentResult, 'events' | 'runId' | 'tracePath' | 'durationMs' | 'tokenUsage'>): AgentResult => {
+    const requirement = input.taskMode === undefined
+      ? { verified: true, reason: 'legacy run without task mode', changedFiles: [] }
+      : checkRequirements(task, input.taskMode, events, config.root);
+    const finalized = result.status === 'done' && !requirement.verified
+      ? {
+          ...result,
+          status: 'blocked' as const,
+          report: `[blocked]\n${requirement.reason}`,
+          terminationReason: requirement.reason,
+        }
+      : result;
     const durationMs = Date.now() - startTime;
-    emit({ type: 'agent_end', status: result.status, report: result.report });
+    emit({ type: 'agent_end', status: finalized.status, report: finalized.report });
     const fullTrace = trace.finalize(
-      result.status,
+      finalized.status,
       durationMs,
       result.toolCallCount,
       result.iterations,
@@ -105,12 +120,15 @@ export async function runAgentLoop(input: RunAgentInput): Promise<AgentResult> {
       // Persistence is best-effort; don't crash if the trace can't be saved.
     }
     return {
-      ...result,
+      ...finalized,
       events,
       runId: trace.runId,
       ...(tracePath !== undefined ? { tracePath } : {}),
       durationMs,
       tokenUsage: fullTrace.tokenUsage,
+      ...(input.taskMode !== undefined ? { taskMode: input.taskMode } : {}),
+      changedFiles: requirement.changedFiles,
+      requirementVerified: requirement.verified,
     };
   };
 

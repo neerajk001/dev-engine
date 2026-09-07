@@ -41,7 +41,7 @@ export function promptSymbol(): string {
 }
 
 export function statusLine(status: string): string {
-  return chalk.green(`● ${status}`);
+  return chalk.white(`● ${status}`);
 }
 
 export function resultBlock(status: AgentStatus, report: string): string {

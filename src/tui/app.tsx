@@ -12,6 +12,7 @@ import { taskToString } from '../optimizer/types.js';
 import type { ClarificationQuestion, OptimizedTask, OptimizeSession } from '../optimizer/types.js';
 import { renderTaskPreview } from '../cli/output.js';
 import { listTraces, loadTrace, formatTraceSummary, formatTraceDetail } from '../tracing/trace.js';
+import type { TaskMode } from '../agent/task-mode.js';
 
 /** Build a blocked result with V4 fields. */
 function blockedResult(report: string): AgentResult {
@@ -72,7 +73,7 @@ function EditableTaskText({ text, cursor }: { text: string; cursor: number }) {
   );
 }
 
-type TuiPhase = 'idle' | 'clarify' | 'preview' | 'edit-preview' | 'running' | 'done' | 'model-select' | 'traces' | 'status';
+type TuiPhase = 'idle' | 'clarify' | 'preview' | 'edit-preview' | 'running' | 'done' | 'model-select' | 'traces' | 'status' | 'mode-select';
 
 interface Execution {
   originalPrompt: string;
@@ -96,6 +97,7 @@ interface TuiState {
   currentOriginalPrompt: string;
   traceOutput: string;
   expandedOptimized: number | null;
+  mode: TaskMode;
 }
 
 type TuiAction =
@@ -117,7 +119,9 @@ type TuiAction =
   | { type: 'model-select' }
   | { type: 'show-traces'; output: string }
   | { type: 'show-status' }
-  | { type: 'toggle-optimized'; index: number };
+  | { type: 'toggle-optimized'; index: number }
+  | { type: 'show-mode-select' }
+  | { type: 'set-mode'; mode: TaskMode };
 
 const MENU_ITEMS: MenuItem[] = [
   { id: 'optimize', label: 'Optimize', shortcut: 'O' },
@@ -141,6 +145,7 @@ const initialState: TuiState = {
   currentOriginalPrompt: '',
   traceOutput: '',
   expandedOptimized: null,
+  mode: 'implement',
 };
 
 function reducer(state: TuiState, action: TuiAction): TuiState {
@@ -153,6 +158,10 @@ function reducer(state: TuiState, action: TuiAction): TuiState {
       return { ...state, cursor: Math.max(0, Math.min(action.cursor, state.prompt.length)) };
     case 'toggle-optimized':
       return { ...state, expandedOptimized: state.expandedOptimized === action.index ? null : action.index };
+    case 'show-mode-select':
+      return { ...state, phase: 'mode-select' };
+    case 'set-mode':
+      return { ...state, mode: action.mode, phase: 'idle', prompt: `/${action.mode} `, cursor: action.mode.length + 2 };
     case 'set-menu':
       return { ...state, menuIndex: action.index };
     case 'set-focus':
@@ -390,6 +399,21 @@ export function TuiApp({ agent, optimizer, workspace, model }: TuiProps) {
   };
 
   useInput((input, key) => {
+    if (state.phase === 'mode-select') {
+      const modes: TaskMode[] = ['analyze', 'plan', 'implement', 'verify'];
+      const selected = modes[state.menuIndex % modes.length]!;
+      if (key.upArrow) {
+        dispatch({ type: 'set-menu', index: (state.menuIndex - 1 + modes.length) % modes.length });
+      } else if (key.downArrow) {
+        dispatch({ type: 'set-menu', index: (state.menuIndex + 1) % modes.length });
+      } else if (key.return) {
+        dispatch({ type: 'set-mode', mode: selected });
+      } else if (key.escape) {
+        dispatch({ type: 'continue' });
+      }
+      return;
+    }
+
     // Model selection phase
     if (state.phase === 'model-select') {
       if (key.escape || key.return) {
@@ -490,6 +514,10 @@ export function TuiApp({ agent, optimizer, workspace, model }: TuiProps) {
 
     // Idle phase - menu navigation and input
     if (state.phase === 'idle') {
+      if (state.prompt === '/' && !key.ctrl) {
+        dispatch({ type: 'show-mode-select' });
+        return;
+      }
       if (key.ctrl && input.toLowerCase() === 'o' && state.history.length > 0) {
         dispatch({ type: 'toggle-optimized', index: state.history.length - 1 });
         return;
@@ -583,7 +611,7 @@ export function TuiApp({ agent, optimizer, workspace, model }: TuiProps) {
 
   return (
     <Box flexDirection="column" paddingY={1}>
-      <StatusBar workspace={workspace} model={model} phase={state.phase} />
+      <StatusBar workspace={workspace} model={model} phase={state.phase} mode={state.mode} />
       
       <Box marginTop={1}>
         <Box width={22} borderStyle="single" borderColor="gray" paddingY={1}>
@@ -651,6 +679,19 @@ export function TuiApp({ agent, optimizer, workspace, model }: TuiProps) {
               <Text dimColor>Press Enter to return</Text>
             </Box>
           )}
+
+          {state.phase === 'mode-select' && (
+            <Box flexDirection="column" borderStyle="single" borderColor="magenta" paddingX={1} marginTop={1}>
+              <Text color="magenta" bold>Select task mode</Text>
+              <Text dimColor>Choose how the agent should handle your request:</Text>
+              {(['analyze', 'plan', 'implement', 'verify'] as TaskMode[]).map((mode, index) => (
+                <Text key={mode} color={index === state.menuIndex % 4 ? 'magenta' : undefined}>
+                  {index === state.menuIndex % 4 ? '▸ ' : '  '}{mode}
+                </Text>
+              ))}
+              <Text dimColor>↑↓ Navigate  Enter Select  Esc Cancel</Text>
+            </Box>
+          )}
           
           {/* Keep prior prompts and agent work visible while the next task is entered or runs. */}
           {(state.phase === 'idle' || state.phase === 'running' || state.phase === 'done') && state.history.length > 0 && (
@@ -662,7 +703,7 @@ export function TuiApp({ agent, optimizer, workspace, model }: TuiProps) {
           )}
           
           {state.phase !== 'edit-preview' && (
-            <Box marginTop={1} borderStyle="single" borderColor={state.focus === 'input' ? 'green' : 'gray'} paddingX={1}>
+            <Box marginTop={1} borderStyle="single" borderColor={state.focus === 'input' ? 'white' : 'gray'} paddingX={1}>
               <Text color={state.focus === 'input' ? 'green' : 'gray'} bold>
                 {state.phase === 'clarify' ? '?' : '>'}
               </Text>
